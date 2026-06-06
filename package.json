@@ -1,6 +1,6 @@
 {
   "name": "react-infinite-scroll",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Infinite scroll list/loader hook and component for React.",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,10 @@
     "intersection-observer",
     "typescript",
     "ui-components",
-    "hooks"
+    "hooks",
+    "chat",
+    "reverse-scroll",
+    "scroll-restoration"
   ],
   "main": "dist/index.js",
   "module": "dist/index.js",

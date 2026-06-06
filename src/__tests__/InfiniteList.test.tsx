@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, act, cleanup } from "@testing-library/react";
+import { render, screen, act, cleanup, fireEvent } from "@testing-library/react";
 import { InfiniteList } from "../InfiniteList.js";
 
 /**
@@ -87,16 +87,22 @@ afterEach(() => {
 
 function renderList(overrides: Partial<Parameters<typeof InfiniteList<number>>[0]> = {}) {
   const loadMore = overrides.loadMore ?? vi.fn();
-  render(
+  const utils = render(
     <InfiniteList<number>
       items={overrides.items ?? [1, 2, 3]}
       renderItem={(n) => <span>item-{n}</span>}
       loadMore={loadMore}
       hasMore={overrides.hasMore ?? true}
       enabled={overrides.enabled}
+      direction={overrides.direction}
+      loader={overrides.loader}
+      endMessage={overrides.endMessage}
+      renderError={overrides.renderError}
+      onError={overrides.onError}
+      aria-label={overrides["aria-label"]}
     />,
   );
-  return { loadMore };
+  return { loadMore, ...utils };
 }
 
 describe("<InfiniteList>", () => {
@@ -105,6 +111,13 @@ describe("<InfiniteList>", () => {
     expect(screen.getByText("item-1")).toBeInTheDocument();
     expect(screen.getByText("item-2")).toBeInTheDocument();
     expect(screen.getByText("item-3")).toBeInTheDocument();
+  });
+
+  it("exposes the feed role and aria-label", () => {
+    renderList({ "aria-label": "Activity feed" });
+    const feed = screen.getByRole("feed");
+    expect(feed).toHaveAttribute("aria-label", "Activity feed");
+    expect(feed).toHaveAttribute("aria-busy", "false");
   });
 
   it("calls loadMore once per intersection", async () => {
@@ -161,5 +174,113 @@ describe("<InfiniteList>", () => {
     // Disabled: the observer is never created, so nothing to trigger.
     expect(MockIntersectionObserver.instances).toHaveLength(0);
     expect(loadMore).not.toHaveBeenCalled();
+  });
+
+  it("shows the loader while loading and toggles aria-busy", async () => {
+    let resolve!: () => void;
+    const loadMore = vi.fn(
+      () => new Promise<void>((r) => { resolve = r; }),
+    );
+    renderList({ loadMore, loader: <span>Loading more</span> });
+    const observer = MockIntersectionObserver.current();
+
+    await observer.trigger(true);
+    expect(screen.getByTestId("infinite-scroll-loader")).toBeInTheDocument();
+    expect(screen.getByRole("feed")).toHaveAttribute("aria-busy", "true");
+
+    await act(async () => {
+      resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId("infinite-scroll-loader")).not.toBeInTheDocument();
+  });
+
+  it("renders the end message when hasMore is false", () => {
+    renderList({ hasMore: false, endMessage: <span>The end</span> });
+    expect(screen.getByTestId("infinite-scroll-end")).toHaveTextContent("The end");
+  });
+
+  describe("error + retry", () => {
+    it("surfaces a default error UI when loadMore rejects, and calls onError", async () => {
+      const onError = vi.fn();
+      const loadMore = vi.fn(() => Promise.reject(new Error("network down")));
+      renderList({ loadMore, onError });
+
+      await MockIntersectionObserver.current().trigger(true);
+
+      expect(screen.getByTestId("infinite-scroll-error")).toHaveAttribute(
+        "role",
+        "alert",
+      );
+      expect(
+        screen.getByTestId("infinite-scroll-error-message"),
+      ).toHaveTextContent("network down");
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+    });
+
+    it("removes the sentinel while an error is outstanding", async () => {
+      const loadMore = vi.fn(() => Promise.reject("boom"));
+      renderList({ loadMore });
+      await MockIntersectionObserver.current().trigger(true);
+      expect(
+        screen.queryByTestId("infinite-scroll-sentinel"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("retries successfully and clears the error", async () => {
+      let attempt = 0;
+      const loadMore = vi.fn(() => {
+        attempt += 1;
+        return attempt === 1
+          ? Promise.reject(new Error("temporary"))
+          : Promise.resolve();
+      });
+      renderList({ loadMore });
+
+      await MockIntersectionObserver.current().trigger(true);
+      expect(screen.getByTestId("infinite-scroll-error")).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("infinite-scroll-retry"));
+        await Promise.resolve();
+      });
+
+      expect(loadMore).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("infinite-scroll-error")).not.toBeInTheDocument();
+      // Sentinel comes back once the error is cleared.
+      expect(screen.getByTestId("infinite-scroll-sentinel")).toBeInTheDocument();
+    });
+
+    it("supports a render-prop error UI", async () => {
+      const loadMore = vi.fn(() => Promise.reject(new Error("custom")));
+      renderList({
+        loadMore,
+        renderError: (err, retry) => (
+          <button onClick={retry}>retry: {err.message}</button>
+        ),
+      });
+      await MockIntersectionObserver.current().trigger(true);
+      expect(screen.getByText("retry: custom")).toBeInTheDocument();
+    });
+  });
+
+  describe("reverse / chat mode", () => {
+    it("renders the sentinel before the items when direction is up", () => {
+      renderList({ direction: "up", items: [1, 2] });
+      const feed = screen.getByRole("feed");
+      const sentinel = screen.getByTestId("infinite-scroll-sentinel");
+      const firstItem = screen.getByText("item-1");
+      // Sentinel should come before the first item in DOM order.
+      const position = sentinel.compareDocumentPosition(firstItem);
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(feed).toBeInTheDocument();
+    });
+
+    it("still loads more when the top sentinel intersects", async () => {
+      const { loadMore } = renderList({ direction: "up" });
+      await MockIntersectionObserver.current().trigger(true);
+      expect(loadMore).toHaveBeenCalledTimes(1);
+    });
   });
 });
