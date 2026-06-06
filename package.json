@@ -1,0 +1,51 @@
+{
+  "name": "react-infinite-scroll",
+  "version": "0.1.0",
+  "description": "Infinite scroll list/loader hook and component for React.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Viprasol Tech Private Limited",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Viprasol-Tech/react-infinite-scroll.git"
+  },
+  "homepage": "https://viprasol.com",
+  "bugs": {
+    "url": "https://github.com/Viprasol-Tech/react-infinite-scroll/issues"
+  },
+  "keywords": [
+    "react",
+    "infinite-scroll",
+    "pagination",
+    "intersection-observer",
+    "typescript",
+    "ui-components",
+    "hooks"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "jsdom": "^24.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
